@@ -1,0 +1,14 @@
+#ifndef PROJECT_H_INCLUDED
+#define PROJECT_H_INCLUDED
+
+typedef enum{
+   STATE_START,
+   STATE_WAIT,
+   STATE_MOVE_1,
+   STATE_MOVE_2,
+   STATE_ACTIVATE,
+   STATE_DEACTIVATE
+
+} State;
+
+#endif // PROJECT_H_INCLUDED
