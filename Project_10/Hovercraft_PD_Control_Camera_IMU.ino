@@ -1,18 +1,13 @@
-/*
-   Project 10
-   Group 4
-   Submitted: 4/27/23
-   Authors: Kyler Clark, Ashley Yi, Caden Matthews
-*/
-#include <quaternionFilters.h>
-#include <MPU9250.h>
-#include <PWMServo.h>
-#include "project.h" //brings enum vals in
-#include "PeriodicAction.h"
-#include <ImuUtils.h>
-#include <OpticalFlowCamera.h>
+#include <quaternionFilters.h>  // Library for quaternion filtering for IMU data
+#include <MPU9250.h>            // Library for MPU9250 IMU
+#include <PWMServo.h>           // Library for PWM servo motor control
+#include "project.h"            // Custom header file for project-specific enumerations and constants
+#include "PeriodicAction.h"     // Library for scheduling periodic actions
+#include <ImuUtils.h>           // IMU utility functions
+#include <OpticalFlowCamera.h>  // Library for interfacing with optical flow cameras
 
-#define switch_pin 0 //following lines give aliases to pin numbers
+// Pin assignments for motors, cameras, and other peripherals
+#define switch_pin 0
 #define m1_clockwise 23
 #define m1_c_clockwise 22
 #define m1_pulsewidth 21
@@ -31,152 +26,143 @@
 #define cam_2 16
 #define cam_3 17
 #define RESET 14
-// Global Variables defined below
-static boolean motor_on = false; //field to hold state of drive motors
-const uint8_t CAMERA_SELECT[3] = {cam_1, cam_2, cam_3}; //pin selection for camera control
-OpticalFlowCamera cams(RESET);
-int32_t adx[3] = {0, 0, 0}; //holds summed camera x slips
-int32_t ady[3] = {0, 0, 0}; //holds summed camera y slips
-PWMServo fan; // create servo object to control the fan
-const int CENTRAL_FAN_PWM = 36;
-float linear_position_goal[2]; // x, y
-float linear_velocity_goal[2]; // x_dot, y_dot
-//Global Varaible end
+
+// Global variables for state and control
+static boolean motor_on = false;                     // Tracks if drive motors are active
+const uint8_t CAMERA_SELECT[3] = {cam_1, cam_2, cam_3}; // Pins for camera control
+OpticalFlowCamera cams(RESET);                       // Optical flow camera object
+int32_t adx[3] = {0, 0, 0};                          // Summed x-slip values from cameras
+int32_t ady[3] = {0, 0, 0};                          // Summed y-slip values from cameras
+PWMServo fan;                                        // Servo object to control the central fan
+const int CENTRAL_FAN_PWM = 36;                      // Pin for central fan PWM
+float linear_position_goal[2];                       // x, y position goals
+float linear_velocity_goal[2];                       // x_dot, y_dot velocity goals
+
 /*
-   input: none
-   output: none
-   function: initializes the Brushless lift motor for power commands
-*/
+ * Function: fan_setup
+ * Initializes the brushless lift motor with low throttle for safety.
+ */
 void fan_setup() {
-  fan.attach(CENTRAL_FAN_PWM); // attaches the fan to specified
-  // Arduino pin to the object
+  fan.attach(CENTRAL_FAN_PWM);  // Attach the fan to the specified pin
   delay(100);
-  fan.write(20); // write low throttle
-  delay(3000);
+  fan.write(20);                // Set low throttle to initialize
+  delay(3000);                  // Allow time for the fan to stabilize
 }
+
 /*
-   input: none
-   output: none
-   function: will set up all cameras. If an issue occurs a while loop continues such that the remainder of the program cannot continue until all cameras are able
-*/
+ * Function: camera_setup
+ * Initializes all optical flow cameras. Retries until all cameras are functional.
+ */
 void camera_setup() {
-  int ret_1 = -1;
-  int ret_2 = -1;
-  int ret_3 = -1;
-  do { //do while used so that the cameras are attempted to be initialized at least once
+  int ret_1 = -1, ret_2 = -1, ret_3 = -1;
+  do { // Retry initialization until successful
     ret_1 = cams.addCamera(CAMERA_SELECT[0]);
     ret_2 = cams.addCamera(CAMERA_SELECT[1]);
     ret_3 = cams.addCamera(CAMERA_SELECT[2]);
     if (ret_1 != 0) Serial.printf("Camera 1 Down \n");
     if (ret_2 != 0) Serial.printf("Camera 2 Down \n");
     if (ret_3 != 0) Serial.printf("Camera 3 Down \n");
-
   } while (ret_1 != 0 || ret_2 != 0 || ret_3 != 0);
 }
+
 /*
-   input: none
-   output: none
-   Function: intitalizes all used pins as input/outputs and begins Serial monitor
-*/
+ * Function: setup
+ * Configures all pins as input/output, initializes cameras and IMU, and starts the serial monitor.
+ */
 void setup() {
-  fan_setup(); //sets the brushless motor power
-  camera_setup();
-  pinMode(switch_pin, INPUT);
+  fan_setup();                  // Initialize lift motor
+  camera_setup();               // Initialize cameras
+  pinMode(switch_pin, INPUT);   // Configure switch pin as input
+
+  // Initialize motor control pins
   pinMode(m1_clockwise, OUTPUT);
   pinMode(m1_c_clockwise, OUTPUT);
   pinMode(m1_pulsewidth, OUTPUT);
-  digitalWrite(m1_clockwise, LOW);
-  digitalWrite(m1_c_clockwise, LOW);
-  digitalWrite(m1_pulsewidth, LOW);
   pinMode(m2_clockwise, OUTPUT);
   pinMode(m2_c_clockwise, OUTPUT);
   pinMode(m2_pulsewidth, OUTPUT);
-  digitalWrite(m2_clockwise, LOW);
-  digitalWrite(m2_c_clockwise, LOW);
-  digitalWrite(m2_pulsewidth, LOW);
   pinMode(m3_clockwise, OUTPUT);
   pinMode(m3_c_clockwise, OUTPUT);
   pinMode(m3_pulsewidth, OUTPUT);
+
+  // Set all motor pins to LOW (off)
+  digitalWrite(m1_clockwise, LOW);
+  digitalWrite(m1_c_clockwise, LOW);
+  digitalWrite(m1_pulsewidth, LOW);
+  digitalWrite(m2_clockwise, LOW);
+  digitalWrite(m2_c_clockwise, LOW);
+  digitalWrite(m2_pulsewidth, LOW);
   digitalWrite(m3_clockwise, LOW);
   digitalWrite(m3_c_clockwise, LOW);
   digitalWrite(m3_pulsewidth, LOW);
-  Serial.begin(115200);
-  Serial.setTimeout(100000000);
-  imu_setup();
-  //imu_calibrate_magbias();
-  IMU.magbias[0] = 145.327698; //calibration information as recieved from IMU
+
+  Serial.begin(115200);         // Start serial communication
+  Serial.setTimeout(100000000); // Set long timeout for serial communication
+  imu_setup();                  // Initialize IMU
+
+  // Apply IMU calibration values
+  IMU.magbias[0] = 145.327698;
   IMU.magbias[1] = -69.055908;
   IMU.magbias[2] = 395.881012;
   delay(1000);
 }
-*
-* input: value - the actual value to be bounded, min_value - the minimum bound, max_value - the maximum bound
-* output: bounded value between min and max bounds
-* function: takes a value and if outside of bounds specified, bounds it
-* /
+
+/*
+ * Function: bound
+ * Ensures a value stays within the specified range.
+ * Input: value, min_value, max_value
+ * Output: Bounded value
+ */
 float bound(float value, float min_value, float max_value) {
-  if (value < min_value) {
-    return min_value; //value below min value coersion
-  }
-  else if (value > max_value) {
-    return max_value; //value above max value coersion
-  }
-  else {
-    return value;
-  }
+  if (value < min_value) return min_value;
+  if (value > max_value) return max_value;
+  return value;
 }
 
 /*
- * input: val[3] - desired motor power values in order of indices is left, right, back
- * output: none
- * Function: sets the motor directions and then sets motor speed by writing to motor speed function, setting motors in order of left, right, back
+ * Function: set_motors
+ * Configures motor directions and sets power levels based on input forces.
  */
-void set_motors(float val[3]){
-  const float negative_gain[3] = {2.7, 2.3, 2.4}; //negative gain to be used to multiply negative motor values
-  const float positive_gain[3] = {1.6, 1.2, 1.2}; //used to correct weak motors in the normal direction
-  for(int i = 0; i <= 2; ++i){
-    int motorClockwise = 0; // following variables used as an alias to switch between motors for control code
-    int motor_C_Clockwise = 0;
-    int motorPulse = 0;
-    if(i == 0){ //0 is left motor
+void set_motors(float val[3]) {
+  const float negative_gain[3] = {2.7, 2.3, 2.4}; // Gain for negative forces
+  const float positive_gain[3] = {1.6, 1.2, 1.2}; // Gain for positive forces
+
+  for (int i = 0; i <= 2; ++i) {
+    // Determine motor pins
+    int motorClockwise = 0, motor_C_Clockwise = 0, motorPulse = 0;
+    if (i == 0) { // Motor 1 (left)
       motorClockwise = m1_clockwise;
       motor_C_Clockwise = m1_c_clockwise;
       motorPulse = m1_pulsewidth;
-    }
-     else if(i == 1){ //1 is right motor
+    } else if (i == 1) { // Motor 2 (right)
       motorClockwise = m2_clockwise;
       motor_C_Clockwise = m2_c_clockwise;
       motorPulse = m2_pulsewidth;
-    }
-     else if(i == 2){ // 2 is the back motor
+    } else if (i == 2) { // Motor 3 (back)
       motorClockwise = m3_clockwise;
       motor_C_Clockwise = m3_c_clockwise;
       motorPulse = m3_pulsewidth;
     }
-    else{
-      break; //should never execute
+
+    // Apply direction and power
+    if (val[i] > 0) { // Clockwise spin
+      val[i] *= positive_gain[i];
+      digitalWrite(motorClockwise, LOW);
+      digitalWrite(motor_C_Clockwise, HIGH);
+    } else if (val[i] < 0) { // Counterclockwise spin
+      val[i] *= negative_gain[i];
+      digitalWrite(motorClockwise, HIGH);
+      digitalWrite(motor_C_Clockwise, LOW);
+    } else { // Stop motor
+      digitalWrite(motorClockwise, LOW);
+      digitalWrite(motor_C_Clockwise, LOW);
     }
-   if(val[i]> 0){ //if val is positive spin is clockwise
-    val[i] = val[i] * positive_gain[i];
-    digitalWrite(motorClockwise, LOW); //direction counter clockwise spin
-    digitalWrite(motor_C_Clockwise, HIGH);
-  }
-  else if(val[i] < 0){ //if val is negative spin is counter clockwise
-    val[i] = val[i] * negative_gain[i];
-    digitalWrite(motorClockwise, HIGH); //direction clockwise spin
-    digitalWrite(motor_C_Clockwise, LOW);
-  }
-  else{
-    digitalWrite(motorClockwise, LOW); //off
-    digitalWrite(motor_C_Clockwise, LOW);
-  }
-    analogWrite(motorPulse, abs(bound(val[i], -90, 64))); //power to motor absolute value taken because power must be > 0. (Bounds Can be Manipulated for Power Tuning)
 
- Serial.printf("Power %f Motor %d \n", val[i], i);
+    // Write power to motor (bounded value)
+    analogWrite(motorPulse, abs(bound(val[i], -90, 64)));
+    Serial.printf("Power %f Motor %d \n", val[i], i);
   }
-  
 }
-
 
 /*
    input: int deg - degree representation of an angle
@@ -216,17 +202,8 @@ void fsm_step() {
   static State current = STATE_START; //initialized in do nothing state
   static State prevState = STATE_START; //used for state transition determination based on specified steps (in instrustions)
   //Serial.printf("State: %d \n" , current);
-
-
-
-
-
-
-
-
-
-
 }
+   
 /*
    input: theta (current orietation angle from IMU), heading_goal (desired orientation direction)
    output: float (returns the angle difference between current position and goal (bounded by -180 and 180);
@@ -276,28 +253,26 @@ float db_clip(float error, float deadband, float saturation) {
 }
 
 /*
-   input: none
-   output: none
-   function: sets the hovercraft forces based on the IMU z rotation axis to counter the rotation
-*/
+ * Function: pd_step
+ * Implements proportional-derivative (PD) control to counter unwanted rotation.
+ */
 void pd_step() {
-  float Kp = 10; //required gain value
-  float fx = 0;
-  float fy = 0;
-  float rotation = 0;
-  static int count = 0;
-  float heading_error = compute_error(IMU.yaw, rotation);
-  static float modified_error = db_clip(heading_error, 3, 40);
-  static float prev_error = 0;
-  float Kd = 0.75;
-  float derivative = Kd * ( modified_error - prev_error) / 0.005;
-  float c_torque = Kp * modified_error + derivative; //set torque for counter balancing
-  // Serial.printf("Torque: %f \n", torque);
-  if (motor_on == true) set_hovercraft_forces(fx, fy, c_torque); //determines if the motors should be activated (only if lift is on)
-  else set_hovercraft_forces(0, 0, 0);
-  prev_error = modified_error;
-}
+  float Kp = 10.0;                 // Proportional gain
+  float Kd = 0.75;                 // Derivative gain
+  float fx = 0, fy = 0, rotation = 0;
+  static float prev_error = 0;     // Track previous error
+  float heading_error = compute_error(IMU.yaw, rotation); // Calculate heading error
+  float modified_error = db_clip(heading_error, 3, 40);   // Clip error within deadband
+  float derivative = Kd * (modified_error - prev_error) / 0.005; // Compute derivative
+  float c_torque = Kp * modified_error + derivative;      // Compute torque
 
+  if (motor_on) { // Apply forces if motors are active
+    set_hovercraft_forces(fx, fy, c_torque);
+  } else {
+    set_hovercraft_forces(0, 0, 0);
+  }
+  prev_error = modified_error; // Update previous error
+}
 
 /*
    input: one
@@ -348,6 +323,7 @@ void camera_step() {
     }
   }
 }
+   
 /*
    input: adx - sum of acculumated x slip for each of 3 cameras, ady - sum of acculumated y slip for each of 3 cameras, cartesian_pos - stores the cartesian motion in each coordinate direction
    output: none
@@ -360,24 +336,22 @@ void compute_chassis_motion(int32_t adx[3], int32_t ady[3], float cartesian_pos[
   cartesian_pos[0] = X_calc; //sets calling function array values due to pass by reference
   cartesian_pos[1] = Y_calc;
   cartesian_pos[2] = T_calc;
-
 }
 
 /*
-   input: none
-   output: none
-   function: repeatedly calls the action events to take place with the hovercraft
-*/
+ * Function: loop
+ * Executes periodic tasks for hovercraft control and camera monitoring.
+ */
 void loop() {
-  // put your main code here, to run repeatedly:
   static PeriodicAction fsm_task(50, fsm_step);
   static PeriodicAction imu_task(5, imu_update);
   static PeriodicAction pd_task(10, pd_step);
   static PeriodicAction report_task(1000, report_step);
   static PeriodicAction camera_task(5, camera_step);
-  imu_task.step();
-  pd_task.step();
-  fsm_task.step();
-  camera_task.step();
-  report_task.step();
+
+  imu_task.step();        // Update IMU
+  pd_task.step();         // Perform PD control
+  fsm_task.step();        // State machine step
+  camera_task.step();     // Update camera slip values
+  report_task.step();     // Report system status
 }
