@@ -1,18 +1,13 @@
-/*
-   Project 10
-   Group 4
-   Submitted: 4/27/23
-   Authors: Kyler Clark, Ashley Yi, Caden Matthews
-*/
-#include <quaternionFilters.h>
-#include <MPU9250.h>
-#include <PWMServo.h>
-#include "project.h" //brings enum vals in
-#include "PeriodicAction.h"
-#include <ImuUtils.h>
-#include <OpticalFlowCamera.h>
+#include <quaternionFilters.h>  // Library for quaternion filtering for IMU data
+#include <MPU9250.h>            // Library for MPU9250 IMU
+#include <PWMServo.h>           // Library for PWM servo motor control
+#include "project.h"            // Custom header file for project-specific enumerations and constants
+#include "PeriodicAction.h"     // Library for scheduling periodic actions
+#include <ImuUtils.h>           // IMU utility functions
+#include <OpticalFlowCamera.h>  // Library for interfacing with optical flow cameras
 
-#define switch_pin 0 //following lines give aliases to pin numbers
+// Pin assignments for motors, cameras, and other peripherals
+#define switch_pin 0
 #define m1_clockwise 23
 #define m1_c_clockwise 22
 #define m1_pulsewidth 21
@@ -31,12 +26,13 @@
 #define cam_2 16
 #define cam_3 17
 #define RESET 14
-// Global Variables defined below
-static boolean motor_on = false; //field to hold state of drive motors
-const uint8_t CAMERA_SELECT[3] = {cam_1, cam_2, cam_3}; //pin selection for camera control
-OpticalFlowCamera cams(RESET);
-int32_t adx[3] = {0, 0, 0}; //holds summed camera x slips
-int32_t ady[3] = {0, 0, 0}; //holds summed camera y slips
+
+// Global variables for state and control
+static boolean motor_on = false;                     // Tracks if drive motors are active
+const uint8_t CAMERA_SELECT[3] = {cam_1, cam_2, cam_3}; // Pins for camera control
+OpticalFlowCamera cams(RESET);                       // Optical flow camera object
+int32_t adx[3] = {0, 0, 0};                          // Summed x-slip values from cameras
+int32_t ady[3] = {0, 0, 0};                          // Summed y-slip values from cameras
 float carteisian_pos[3] = {0.0, 0.0, 0.0};
 PWMServo fan; // create servo object to control the fan
 const int CENTRAL_FAN_PWM = 36;
@@ -45,6 +41,7 @@ float linear_position[2] = {0,0}; // current position of the hovercraft
 float linear_velocity[2] = {0,0}; // current velocity of the hovercraft
 float linear_velocity_goal[2] = {0,0}; // x_dot, y_dot: set velocity goal for the hovercraft
 //Global Varaible end
+
 /*
    input: none
    output: none
@@ -57,6 +54,7 @@ void fan_setup() {
   fan.write(20); // write low throttle
   delay(3000);
 }
+
 /*
    input: none
    output: none
@@ -76,6 +74,7 @@ void camera_setup() {
 
   } while (ret_1 != 0 || ret_2 != 0 || ret_3 != 0);
 }
+
 /*
    input: none
    output: none
@@ -410,8 +409,6 @@ void pd_step() {
   //Serial.printf("Fx: %f, Fy: %f, Torque: %f \n", fx, fy, c_torque);
 }
 
-
-
 /*
    input: one
    output: none
@@ -474,6 +471,7 @@ void camera_step() {
   linear_velocity[0] = linear_velocity_goal[0] * (1 - dt/tau) + (x2 - x1); // low-pass filtered velocity (x-axis)
   linear_velocity[1] = linear_velocity_goal[1] * (1 - dt/tau) + (y2 - y1); // low-pass filtered velocity (y-axis)
 }
+
 /*
    input: adx - sum of acculumated x slip for each of 3 cameras, ady - sum of acculumated y slip for each of 3 cameras, cartesian_pos - stores the cartesian motion in each coordinate direction
    output: none
