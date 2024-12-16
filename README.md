@@ -1,4 +1,4 @@
-# Embedded-Real-Time-Systems
+# Embedded-Real-Time-Systems-Practice
 
 This repository contains various embedded systems projects focusing on real-time control, navigation, and sensor integration for autonomous systems. Each project demonstrates the integration of sensors, actuators, and control algorithms for specific embedded applications.
 
@@ -159,8 +159,8 @@ Install these libraries via the Arduino Library Manager or download them from th
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/Embedded-Real-Time-Systems.git
-   cd Embedded-Real-Time-Systems
+   git clone https://github.com/Keeby-Astro/Embedded-Real-Time-Systems-Practice.git
+   cd Embedded-Real-Time-Systems-Practice
    ```
 
 2. Install the necessary libraries.
