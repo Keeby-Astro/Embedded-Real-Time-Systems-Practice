@@ -1,168 +1,175 @@
-#include <PWMServo.h>
-#include "project.h" //brings enum vals in
-#include "PeriodicAction.h"
+#include <PWMServo.h>         // Include PWMServo library for controlling brushless motor
+#include "project.h"          // Include custom header file for enumerations and configurations
+#include "PeriodicAction.h"   // Include library for scheduling periodic actions
 
 //#define PI 3.1415926535897932384626433832795
-#define switch_pin 0 //following lines give aliases to pin numbers
-#define m1_clockwise 1
-#define m1_c_clockwise 2
-#define m1_pulsewidth 3
-#define m2_clockwise 22
-#define m2_c_clockwise 23
-#define m2_pulsewidth 21
-#define m3_clockwise 7
-#define m3_c_clockwise 8
-#define m3_pulsewidth 9
-PWMServo fan; // create servo object to control the fan
-const int CENTRAL_FAN_PWM = 36; 
+#define switch_pin 0          // Pin connected to the control switch
+#define m1_clockwise 1        // Motor 1 clockwise control pin
+#define m1_c_clockwise 2      // Motor 1 counter-clockwise control pin
+#define m1_pulsewidth 3       // Motor 1 PWM speed control pin
+#define m2_clockwise 22       // Motor 2 clockwise control pin
+#define m2_c_clockwise 23     // Motor 2 counter-clockwise control pin
+#define m2_pulsewidth 21      // Motor 2 PWM speed control pin
+#define m3_clockwise 7        // Motor 3 clockwise control pin
+#define m3_c_clockwise 8      // Motor 3 counter-clockwise control pin
+#define m3_pulsewidth 9       // Motor 3 PWM speed control pin
+
+PWMServo fan;                 // Create PWMServo object to control the central fan
+const int CENTRAL_FAN_PWM = 36; // Pin for controlling the central fan
+
 /*
- * input: none
- * output: none
- * function: initializes the Brushless lift motor for power commands
+ * Initializes the brushless lift motor (fan) with a low throttle command.
  */
 void fan_setup() {
-fan.attach(CENTRAL_FAN_PWM); // attaches the fan to specified
-// Arduino pin to the object
-delay(100);
-fan.write(20); // write low throttle
-delay(3000);
+  fan.attach(CENTRAL_FAN_PWM); // Attach the fan to the specified PWM pin
+  delay(100);
+  fan.write(20);               // Send a low throttle signal
+  delay(3000);                 // Wait for motor to initialize
 }
+
 /*
- * input: none
- * output: none
- * Function: intitalizes all used pins as input/outputs and begins Serial monitor
+ * Sets up all pins as inputs/outputs and initializes the serial monitor.
  */
 void setup() {
-  fan_setup(); //sets the brushless motor power
-  pinMode(switch_pin, INPUT);
+  fan_setup();                 // Set up the brushless motor power
+  pinMode(switch_pin, INPUT);  // Set switch pin as input
+
+  // Initialize motor 1 pins
   pinMode(m1_clockwise, OUTPUT);
   pinMode(m1_c_clockwise, OUTPUT);
   pinMode(m1_pulsewidth, OUTPUT);
   digitalWrite(m1_clockwise, LOW);
   digitalWrite(m1_c_clockwise, LOW);
   digitalWrite(m1_pulsewidth, LOW);
+
+  // Initialize motor 2 pins
   pinMode(m2_clockwise, OUTPUT);
   pinMode(m2_c_clockwise, OUTPUT);
   pinMode(m2_pulsewidth, OUTPUT);
   digitalWrite(m2_clockwise, LOW);
   digitalWrite(m2_c_clockwise, LOW);
   digitalWrite(m2_pulsewidth, LOW);
+
+  // Initialize motor 3 pins
   pinMode(m3_clockwise, OUTPUT);
   pinMode(m3_c_clockwise, OUTPUT);
   pinMode(m3_pulsewidth, OUTPUT);
   digitalWrite(m3_clockwise, LOW);
   digitalWrite(m3_c_clockwise, LOW);
   digitalWrite(m3_pulsewidth, LOW);
-  Serial.begin(115200);
-  Serial.setTimeout(100000000);
-  delay(1000);
+
+  Serial.begin(115200);        // Begin serial communication at 115200 baud rate
+  Serial.setTimeout(100000000); // Set a long timeout for serial communication
+  delay(1000);                 // Delay for setup stability
 }
 
 /*
- * input: value - the actual value to be bounded, min_value - the minimum bound, max_value - the maximum bound
- * output: bounded value between min and max bounds
- * function: takes a value and if outside of bounds specified, bounds it
+ * Ensures that a given value is within a specified range.
  */
-float bound(float value, float min_value, float max_value){
-  if(value < min_value){
-    return min_value; //value below min value coersion
-  }
-  else if(value > max_value){
-    return max_value; //value above max value coersion
-  }
-  else{
-    return value;
+float bound(float value, float min_value, float max_value) {
+  if (value < min_value) {
+    return min_value;          // Enforce minimum value
+  } else if (value > max_value) {
+    return max_value;          // Enforce maximum value
+  } else {
+    return value;              // Return the original value if within bounds
   }
 }
+
 /*
- * input: val[3] - desired motor power values in order of indices is left, right, back
- * output: none
- * Function: sets the motor directions and then sets motor speed by writing to motor speed function, setting motors in order of left, right, back
+ * Configures the motors' directions and speeds based on input power values.
  */
-void set_motors(float val[3]){
-  const float negative_gain[3] = {1.1, 1.1, 1.2}; //negative gain to be used to multiply negative motor values
-  const float positive_gain[3] = {1.0, 1.0, 1.1}; //used to correct weak motors in the normal direction
-  for(int i = 0; i <= 2; ++i){
-    int motorClockwise = 0; // following variables used as an alias to switch between motors for control code
-    int motor_C_Clockwise = 0;
-    int motorPulse = 0;
-    if(i == 0){ //0 is left motor
+void set_motors(float val[3]) {
+  const float negative_gain[3] = {1.1, 1.1, 1.2}; // Gain for negative values
+  const float positive_gain[3] = {1.0, 1.0, 1.1}; // Gain for positive values
+
+  for (int i = 0; i <= 2; ++i) {
+    int motorClockwise = 0;        // Variable for clockwise control pin
+    int motor_C_Clockwise = 0;     // Variable for counter-clockwise control pin
+    int motorPulse = 0;            // Variable for PWM pin
+
+    // Assign motor pins based on the index
+    if (i == 0) { // Motor 1 (left motor)
       motorClockwise = m1_clockwise;
       motor_C_Clockwise = m1_c_clockwise;
       motorPulse = m1_pulsewidth;
-    }
-     else if(i == 1){ //1 is right motor
+    } else if (i == 1) { // Motor 2 (right motor)
       motorClockwise = m2_clockwise;
       motor_C_Clockwise = m2_c_clockwise;
       motorPulse = m2_pulsewidth;
-    }
-     else if(i == 2){ // 2 is the back motor
+    } else if (i == 2) { // Motor 3 (back motor)
       motorClockwise = m3_clockwise;
       motor_C_Clockwise = m3_c_clockwise;
       motorPulse = m3_pulsewidth;
     }
-    else{
-      break; //should never execute
+
+    // Configure motor direction and power
+    if (val[i] > 0) { // Positive power for clockwise spin
+      val[i] *= positive_gain[i];
+      digitalWrite(motorClockwise, LOW);
+      digitalWrite(motor_C_Clockwise, HIGH);
+    } else if (val[i] < 0) { // Negative power for counter-clockwise spin
+      val[i] *= negative_gain[i];
+      digitalWrite(motorClockwise, HIGH);
+      digitalWrite(motor_C_Clockwise, LOW);
+    } else { // Stop the motor
+      digitalWrite(motorClockwise, LOW);
+      digitalWrite(motor_C_Clockwise, LOW);
     }
-   if(val[i]> 0){ //if val is positive spin is clockwise
-    val[i] = val[i] * positive_gain[i];
-    digitalWrite(motorClockwise, LOW); //direction counter clockwise spin
-    digitalWrite(motor_C_Clockwise, HIGH);
-  }
-  else if(val[i] < 0){ //if val is negative spin is counter clockwise
-    val[i] = val[i] * negative_gain[i];
-    digitalWrite(motorClockwise, HIGH); //direction clockwise spin
-    digitalWrite(motor_C_Clockwise, LOW);
-  }
-  else{
-    digitalWrite(motorClockwise, LOW); //off
-    digitalWrite(motor_C_Clockwise, LOW);
-  }
-    analogWrite(motorPulse, abs(bound(val[i], -64, 64))); //power to motor absolute value taken because power must be > 0. (Bounds Can be Manipulated for Power Tuning)
 
-  Serial.printf("Power %f Motor %d \n", val[i], motorPulse);
+    // Write the power to the motor PWM pin (bounded within range)
+    analogWrite(motorPulse, abs(bound(val[i], -64, 64)));
+    Serial.printf("Power %f Motor %d \n", val[i], motorPulse);
   }
-  
 }
 
 /*
- * input: int deg - degree representation of an angle
- * output: converted float of the radian value of an angle
- * function: takes an angle and returns equivalent radian representation
+ * Converts an angle from degrees to radians.
  */
-float angle_radians(int deg){
-  return (((float) deg) *(PI/180.00));
+float angle_radians(int deg) {
+  return (((float)deg) * (PI / 180.0)); // Convert degrees to radians
 }
+
 /*
- * input: float fx - desired forces in x direction, float fy - desired forces in y direction, float torque - desired torque of vehicle
- * output: F1 - motor one forces, F2 - motor two forces, F3 - motor three forces
- * function: Takes desired fx, fy, and torque specified and converts that to power vals of the three attached motors
+ * Calculates motor forces based on desired force and torque inputs.
  */
- 
-void set_hovercraft_forces(float fx, float fy, float torque){
-  float F1;
-  float F2;
-  float F3;
-  float R = 1; //effective radius of hovercraft
-  F1 = ((1/(2*cos(angle_radians(30)))) * fx) + ((-1/(2+(2*sin(angle_radians(30)))))*fy) + ((-1/(2*R*(1+(sin(angle_radians(30))))))*torque);
-  F2 = ((1/(2*cos(angle_radians(30)))) * fx) + ((1/(2+(2*sin(angle_radians(30)))))*fy) + ((1/(2*R*(1+(sin(angle_radians(30))))))*torque);
-  F3 = ((-1/(1+(1*sin(angle_radians(30)))))*fy) + ((sin(angle_radians(30))/(R*(1+(sin(angle_radians(30))))))*torque);
-  float forces[] = {F1, F2, F3};
-  set_motors(forces); //sets the motor power with the calculated new forces
-  
+void set_hovercraft_forces(float fx, float fy, float torque) {
+  float F1, F2, F3;
+  float R = 1; // Effective radius of the hovercraft
+
+  // Calculate motor forces using force and torque equations
+  F1 = ((1 / (2 * cos(angle_radians(30)))) * fx) +
+       ((-1 / (2 + (2 * sin(angle_radians(30))))) * fy) +
+       ((-1 / (2 * R * (1 + (sin(angle_radians(30)))))) * torque);
+
+  F2 = ((1 / (2 * cos(angle_radians(30)))) * fx) +
+       ((1 / (2 + (2 * sin(angle_radians(30))))) * fy) +
+       ((1 / (2 * R * (1 + (sin(angle_radians(30)))))) * torque);
+
+  F3 = ((-1 / (1 + (1 * sin(angle_radians(30))))) * fy) +
+       ((sin(angle_radians(30)) / (R * (1 + (sin(angle_radians(30)))))) * torque);
+
+  float forces[] = {F1, F2, F3}; // Array of calculated forces
+  set_motors(forces);            // Set the motor power based on forces
 }
 
-
-
-
-
-
-
+/*
+ * Implements the finite state machine (FSM) for hovercraft control.
+ */
+void fsm_step() {
+  // FSM implementation with states and transitions (refer to code for full details)
+}
 
 /*
- * input: none
- * output: none
- * function: direction vehicle control through state machine behavior
+ * Main loop: Repeatedly calls the FSM step function at 50 ms intervals.
+ */
+void loop() {
+  static PeriodicAction fsm_task(50, fsm_step);
+  fsm_task.step();
+}
+
+/*
+ * Implements the finite state machine (FSM) for hovercraft control.
  */
 void fsm_step(){
   static int timingTotal = 0; //used for totalvehicle time
@@ -364,33 +371,10 @@ void fsm_step(){
   }
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /*
- * input: none
- * output: none
- * function: Continously calls fsm_step with 50 ms intervals
+ * Main loop: Repeatedly calls the FSM step function at 50 ms intervals.
  */
 void loop() {
-  // put your main code here, to run repeatedly:
   static PeriodicAction fsm_task(50, fsm_step);
   fsm_task.step();
-
 }
